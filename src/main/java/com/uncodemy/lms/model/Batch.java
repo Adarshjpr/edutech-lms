@@ -220,7 +220,8 @@ public class Batch {
      * ✔ Same type ke multiple announcements rakh sakte hain.
      * ✔ Index ke through access kar sakte hain.
      */
-
+@Column(columnDefinition = "TEXT")
+private String communityLink;
     @CreatedDate
 private LocalDateTime createdAt;
 

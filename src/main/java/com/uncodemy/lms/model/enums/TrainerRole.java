@@ -1,5 +1,6 @@
 package com.uncodemy.lms.model.enums;
 
-public class TrainerRole {
-
+public enum TrainerRole {
+   TRAINER,
+    ADMIN_TRAINER
 }
