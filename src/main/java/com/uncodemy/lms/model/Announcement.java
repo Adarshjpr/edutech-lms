@@ -1,6 +1,5 @@
 package com.uncodemy.lms.model;
 
-
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -10,152 +9,183 @@ import java.util.List;
 
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
+import com.uncodemy.lms.model.enums.AnnouncementScope;
+
 /**
  * Announcement Entity
  *
- * Ye class database ke "announcements" table ko represent karti hai.
- * Isme Batch, Trainer ya Admin ke dwara bheje gaye announcements store hote hain.
+ * Batch, Trainer ya Admin ke dwara bheje gaye announcements.
  *
  * Example:
  * ------------------------------------------
- * Message : Tomorrow class will start at 8 PM.
+ * Title   : Holiday Notice
+ * Message : Aaj ki class cancel hai.
+ * Scope   : SPECIFIC_BATCH
  * Batch   : JAVA101
- * Trainer : Rahul Sir
- * Admin   : Adarsh
  * ------------------------------------------
  */
-@Entity                           // Is class ko Database Entity banata hai.
-@Table(name = "announcements")    // Database me table ka naam "announcements" hoga.
-@Getter                           // Automatically Getters generate karega.
-@Setter                           // Automatically Setters generate karega.
-@NoArgsConstructor                // Default Constructor banata hai.
-@AllArgsConstructor               // Sabhi fields wala Constructor banata hai.
-@Builder                          // Builder Pattern support karta hai.
+@Entity
+@Table(
+    name = "announcements",
+    indexes = {
+        // batch ke announcements latest-first nikalne ke liye
+        @Index(name = "idx_ann_batch_created", columnList = "batch_id, created_at")
+    }
+)
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@EntityListeners(AuditingEntityListener.class)
 public class Announcement {
 
-    /**
-     * Primary Key
-     *
-     * Database automatically unique ID generate karega.
-     *
-     * Example:
-     * 1
-     * 2
-     * 3
-     */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     /**
-     * Announcement ka message.
+     * NAYA FIELD
      *
-     * Example:
-     * "Today's class is cancelled."
-     * "Assignment has been uploaded."
-     * "Tomorrow is holiday."
+     * Announcement ka title / heading.
      *
-     * TEXT use kiya gaya hai kyunki
-     * message kabhi-kabhi kaafi lamba ho sakta hai.
+     * Mail ka SUBJECT yahi banega.
+     *
+     * Example: "Holiday Notice", "Class Cancelled"
      */
-    @Column(columnDefinition = "TEXT")
+    @Column(nullable = false)
+    private String title;
+
+    /**
+     * Announcement ka message (mail ka body).
+     *
+     * Example: "Kal ki class 8 PM se shuru hogi."
+     */
+    @Column(columnDefinition = "TEXT", nullable = false)
     private String message;
 
     /**
-     * Many-to-One Relationship
+     * NAYA FIELD --- API 8 KI SABSE ZAROORI CHEEZ
      *
-     * Ek Batch me bahut saare Announcements ho sakte hain.
-     * Lekin ek Announcement sirf ek Batch ka hoga.
+     * Announcement kahan tak jayega:
      *
-     * Example:
+     * SPECIFIC_BATCH  -> batchId diya gaya hai
+     *                    sirf uss batch ke students ko mail
      *
-     * JAVA101 Batch
-     *      |
-     *      |------ Class Cancelled
-     *      |------ Assignment Uploaded
-     *      |------ Exam Notice
+     * ALL_MY_BATCHES  -> batchId nahi diya
+     *                    Trainer ke SAARE batches ke students ko mail
+     *
+     * GLOBAL          -> Admin ne bina batchId ke bheja
+     *                    Institute ke saare students ko mail
+     *
+     * Iss field se batch = null wale case bhi
+     * clearly samajh aa jate hain.
      */
-    @ManyToOne
-    @JoinColumn(name = "batch_id")   // announcements table me batch_id Foreign Key banegi.
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private AnnouncementScope scope;
+
+    /**
+     * Many-to-One
+     *
+     * Announcement kis Batch ka hai.
+     *
+     * IMPORTANT: ab ye NULLABLE hai.
+     *
+     * scope = SPECIFIC_BATCH  -> batch set hoga
+     * scope = ALL_MY_BATCHES  -> null
+     * scope = GLOBAL          -> null
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "batch_id")
     private Batch batch;
 
     /**
-     * Many-to-One Relationship
+     * Many-to-One
      *
-     * Ek Trainer multiple announcements bhej sakta hai.
-     * Lekin ek Announcement sirf ek Trainer se related hoga.
-     *
-     * Example:
-     *
-     * Rahul Sir
-     *     |
-     *     |------ Spring Boot Class Today
-     *     |------ Java Notes Uploaded
+     * Kis Trainer ne bheja.
+     * Admin ne bheja to null.
      */
-    @ManyToOne
-    @JoinColumn(name = "trainer_id") // announcements table me trainer_id Foreign Key banegi.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "trainer_id")
     private Trainer trainer;
 
     /**
-     * Many-to-One Relationship
+     * Many-to-One
      *
-     * Ek Admin bhi multiple announcements bhej sakta hai.
-     * Lekin ek Announcement sirf ek Admin ka hoga.
+     * Kis Admin ne bheja.
+     * Trainer ne bheja to null.
      *
-     * Example:
-     *
-     * Admin
-     *    |
-     *    |------ Holiday Notice
-     *    |------ Fee Reminder
-     *    |------ New Batch Started
+     * NOTE: trainer aur admin dono me se
+     * hamesha EXACTLY EK hi set hoga.
+     * Ye check service layer me lagayenge.
      */
-    @ManyToOne
-    @JoinColumn(name = "admin_id")   // announcements table me admin_id Foreign Key banegi.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "admin_id")
     private Admin admin;
 
     /**
-     * Announcement kab create hua tha.
+     * NAYA FIELD
      *
-     * Example:
-     * 2026-07-28T10:30:15
-     *
-     * LocalDateTime Date aur Time dono ko store karta hai.
+     * Important announcement upar pin ho jaye.
+     * Example: "Exam Schedule"
      */
-
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean pinned = false;
 
     /**
-     * One-to-Many Relationship
+     * NAYE FIELDS --- mail tracking
      *
-     * Ek Announcement ke andar multiple Contents ho sakte hain.
+     * mailSent      -> mail successfully gaya ya nahi
+     * mailSentAt    -> kab gaya
+     * recipientCount-> kitne logo ko gaya
      *
-     * Example:
-     *
-     * Announcement:
-     * "Java Notes Uploaded"
-     *      |
-     *      |------ PDF Link
-     *      |------ YouTube Link
-     *      |------ Source Code ZIP
-     *
-     * cascade = CascadeType.ALL
-     * -> Agar Announcement Save/Delete hoga,
-     *    to uske saare Contents par bhi wahi operation perform hoga.
+     * Ye isliye chahiye kyunki mail bhejna
+     * async hoga. Agar SMTP fail ho jaye to
+     * pata chalna chahiye ki kis announcement
+     * ka mail pending reh gaya (retry kar sakein).
      */
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean mailSent = false;
+
+    private LocalDateTime mailSentAt;
+
+    @Builder.Default
+    private Integer recipientCount = 0;
+
+    /**
+     * NAYA FIELD
+     *
+     * Soft delete.
+     */
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean active = true;
+
+    /**
+     * One-to-Many
+     *
+     * Announcement ke saath attach kiye gaye contents.
+     *
+     * "Java Notes Uploaded"
+     *      |---- PDF Link
+     *      |---- YouTube Link
+     *
+     * cascade = ALL -> announcement delete pe
+     *                  uske attached contents bhi delete
+     */
+    @Builder.Default
     @OneToMany(mappedBy = "announcement", cascade = CascadeType.ALL)
     private List<Content> contents = new ArrayList<>();
 
-    /**
-     * ArrayList kyu use ki gayi?
-     *
-     * ✔ Multiple Contents store karne ke liye.
-     * ✔ Insertion order maintain rehta hai.
-     * ✔ Dynamic size hoti hai.
-     * ✔ Index ke through access kar sakte hain.
-     */
     @CreatedDate
-private LocalDateTime createdAt;
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
 
-@LastModifiedDate
-private LocalDateTime updatedAt;
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
 }

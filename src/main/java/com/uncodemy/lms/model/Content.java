@@ -1,7 +1,5 @@
 package com.uncodemy.lms.model;
 
-
-
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -9,132 +7,184 @@ import java.time.LocalDateTime;
 
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import com.uncodemy.lms.model.enums.ContentType;
 
 /**
  * Content Entity
  *
- * Ye class database ke "contents" table ko represent karti hai.
- * Isme Trainer ke dwara upload kiye gaye study materials store hote hain.
+ * Trainer ke dwara upload kiye gaye study materials.
  *
  * Example:
  * ------------------------------------------
- * Title : Spring Boot Notes
- * Type  : PDF
- * Link  : https://drive.google.com/.....
+ * Title  : Spring Boot Notes
+ * Type   : PDF
+ * Link   : https://res.cloudinary.com/.....
+ * Batch  : JAVA101
+ * Date   : 2026-07-31
  * ------------------------------------------
  */
-@Entity                           // Is class ko Database Entity banata hai.
-@Table(name = "contents")         // Database me table ka naam "contents" hoga.
-@Getter                           // Automatically Getters generate karega.
-@Setter                           // Automatically Setters generate karega.
-@NoArgsConstructor                // Default Constructor banata hai.
-@AllArgsConstructor               // Sabhi fields wala Constructor banata hai.
-@Builder                          // Builder Pattern support karta hai.
+@Entity
+@Table(
+    name = "contents",
+    indexes = {
+        // API 9: batch ke hisaab se date-wise fetch fast ho
+        @Index(name = "idx_content_batch_uploaded", columnList = "batch_id, uploaded_at")
+    }
+)
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@EntityListeners(AuditingEntityListener.class)
 public class Content {
 
-    /**
-     * Primary Key
-     *
-     * Database automatically unique ID generate karega.
-     *
-     * Example:
-     * 1
-     * 2
-     * 3
-     */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     /**
      * Content ka title.
-     *
-     * Example:
-     * Java Notes
-     * Spring Boot PPT
-     * React Recording
+     * Example: Java Notes, React Recording
      */
+    @Column(nullable = false)
     private String title;
 
     /**
+     * NAYA FIELD
+     *
+     * Content ke baare me chhota sa description.
+     * Optional hai.
+     *
+     * Example: "Day 12 - Collections ka complete notes"
+     */
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    /**
      * Content ka type.
-     *
-     * Enum use kiya gaya hai.
-     *
-     * Example:
-     * PDF
-     * VIDEO
-     * LINK
-     * DOCUMENT
-     *
-     * Database me String ke form me store hoga.
+     * Example: PDF, VIDEO, LINK, DOCUMENT
      */
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private ContentType type;
 
     /**
-     * Content ka URL ya Download Link.
+     * Content ka URL / Download Link.
      *
-     * Example:
-     * https://drive.google.com/...
-     * https://youtube.com/...
-     *
-     * TEXT use kiya gaya hai kyunki URL lamba ho sakta hai.
+     * Do tarah se aa sakta hai:
+     * 1. Trainer ne seedha link paste kiya (YouTube, Drive)
+     * 2. Trainer ne file upload ki -> Cloudinary ka URL
      */
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT", nullable = false)
     private String link;
 
     /**
-     * Many-to-One Relationship
+     * NAYA FIELD
      *
-     * Ek Announcement ke andar multiple Contents ho sakte hain.
-     * Lekin ek Content sirf ek Announcement se related hoga.
+     * Cloudinary ka public_id.
      *
-     * Example:
+     * Ye kyun chahiye?
+     * Cloudinary se file DELETE karne ke liye URL kaam nahi aata,
+     * public_id chahiye hota hai.
      *
-     * Announcement:
-     * "Spring Boot Resources"
-     *      |
-     *      |------ PDF
-     *      |------ Video
-     *      |------ GitHub Link
+     * Example: lms/contents/java_notes_a8f3k2
+     *
+     * Agar trainer ne sirf link paste kiya (upload nahi kiya)
+     * to ye null rahega.
      */
-    @ManyToOne
-    @JoinColumn(name = "announcement_id") // contents table me announcement_id Foreign Key banegi.
+    private String cloudinaryPublicId;
+
+    /**
+     * NAYA FIELD
+     *
+     * File ka size bytes me (sirf uploaded files ke liye).
+     * UI pe "2.4 MB" dikhane ke kaam aayega.
+     */
+    private Long fileSize;
+
+    /**
+     * NAYA RELATION --- API 9 KI SABSE ZAROORI CHEEZ
+     *
+     * Content kis Batch ka hai.
+     *
+     * Pehle ye field thi hi nahi, isliye
+     * "batch ke hisaab se content nikalo" possible nahi tha.
+     *
+     * JAVA101 Batch
+     *    |---- Day 1 Notes
+     *    |---- Day 2 Recording
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "batch_id", nullable = false)
+    private Batch batch;
+
+    /**
+     * Many-to-One
+     *
+     * Content kis Announcement ke saath attach hai.
+     *
+     * IMPORTANT: ab ye OPTIONAL (nullable) hai.
+     *
+     * Do case:
+     * 1. Trainer ne sirf content upload kiya  -> announcement = null
+     * 2. Announcement ke saath file bheji     -> announcement set
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "announcement_id")
     private Announcement announcement;
 
     /**
-     * Many-to-One Relationship
+     * Many-to-One
      *
-     * Ek Trainer multiple Contents upload kar sakta hai.
-     * Lekin ek Content sirf ek Trainer ne upload kiya hoga.
-     *
-     * Example:
-     *
-     * Rahul Sir
-     *     |
-     *     |------ Java Notes
-     *     |------ Spring Boot PDF
-     *     |------ React Recording
+     * Kis Trainer ne upload kiya.
+     * Admin ne upload kiya to null rahega.
      */
-    @ManyToOne
-    @JoinColumn(name = "trainer_id") // contents table me trainer_id Foreign Key banegi.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "trainer_id")
     private Trainer trainer;
 
     /**
-     * Content kab upload hua tha.
+     * NAYA FIELD
      *
-     * Example:
-     * 2026-07-28T11:45:20
-     *
-     * LocalDateTime Date aur Time dono ko store karta hai.
+     * Agar Admin ne content upload kiya ho.
      */
-    private LocalDateTime uploadedAt;
-    @CreatedDate
-private LocalDateTime createdAt;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "uploaded_by_admin_id")
+    private Admin uploadedByAdmin;
 
-@LastModifiedDate
-private LocalDateTime updatedAt;
+    /**
+     * API 9 --- "date wise save ho jaiye"
+     *
+     * Content kab upload hua.
+     *
+     * createdAt se alag kyun?
+     * Kyunki trainer purani class ka content
+     * baad me bhi upload kar sakta hai aur
+     * manually date set kar sakta hai.
+     *
+     * Example: 2026-07-28T11:45:20
+     */
+    @Column(name = "uploaded_at", nullable = false)
+    private LocalDateTime uploadedAt;
+
+    /**
+     * NAYA FIELD
+     *
+     * Soft delete.
+     * Content delete karne pe Cloudinary se file
+     * turant nahi hatayenge, sirf ye false kar denge.
+     */
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean active = true;
+
+    @CreatedDate
+    @Column(updatable = false)
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
 }

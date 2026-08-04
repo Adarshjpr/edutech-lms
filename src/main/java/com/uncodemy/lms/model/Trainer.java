@@ -9,6 +9,7 @@ import java.util.List;
 
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import com.uncodemy.lms.model.enums.TrainerRole;
 
@@ -16,156 +17,149 @@ import com.uncodemy.lms.model.enums.TrainerRole;
  * Trainer Entity
  *
  * Ye class database ke "trainers" table ko represent karti hai.
- * Isme trainer ki basic information store hoti hai.
  *
  * Example:
  * Trainer ID : TR101
  * Name       : Rahul Sharma
+ * Username   : rahul.sharma
  * Role       : TRAINER
- * Designation: Senior Java Trainer
  */
-@Entity                          // Is class ko Database Entity banata hai.
-@Table(name = "trainers")        // Database me table ka naam "trainers" hoga.
-@Getter                          // Automatically Getters generate karega.
-@Setter                          // Automatically Setters generate karega.
-@NoArgsConstructor               // Default Constructor banata hai.
-@AllArgsConstructor              // Sabhi fields wala Constructor banata hai.
-@Builder                         // Builder Pattern support karta hai.
+@Entity
+@Table(name = "trainers")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@EntityListeners(AuditingEntityListener.class)   // createdAt / updatedAt auto-fill
 public class Trainer {
 
-    /**
-     * Primary Key
-     *
-     * Database automatically unique ID generate karega.
-     *
-     * Example:
-     * 1
-     * 2
-     * 3
-     */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     /**
-     * Trainer ka unique ID.
-     *
-     * Example:
-     * TR101
-     * TR102
-     *
-     * unique = true
-     * -> Same Trainer ID do baar nahi ho sakti.
+     * Trainer ka unique ID (system generate karega).
+     * Example: TR101, TR102
      */
-    @Column(name = "trainer_id", unique = true)
+    @Column(name = "trainer_id", unique = true, nullable = false)
     private String trainerId;
 
     /**
      * Trainer ka naam.
-     *
-     * Example:
-     * Rahul Sharma
-     * Amit Kumar
+     * API 10 me isi name se search hoga.
      */
+    @Column(nullable = false)
     private String name;
 
     /**
-     * Trainer ki Designation.
+     * NAYA FIELD
      *
-     * Example:
-     * Senior Java Trainer
-     * MERN Trainer
-     * Placement Mentor
+     * Login Username.
+     *
+     * API 2 ke hisaab se trainer ko mail me
+     * USERNAME + PASSWORD dono jaayenge.
+     *
+     * System auto-generate karega, example:
+     * "Rahul Sharma" -> rahul.sharma
+     * agar already exist kare -> rahul.sharma1
+     */
+    @Column(unique = true, nullable = false)
+    private String username;
+
+    /**
+     * Trainer ki Designation.
+     * Example: Senior Java Trainer
      */
     private String designation;
 
     /**
+     * NAYA FIELD
+     *
+     * Trainer ka mobile number.
+     */
+    @Column(length = 15)
+    private String phone;
+
+    /**
      * Trainer ka Role.
-     *
-     * Enum use kiya gaya hai.
-     *
-     * Example:
-     * TRAINER
-     * ADMIN
-     * PLACEMENT_TEAM
-     *
-     * Database me String ke form me save hoga.
+     * Example: TRAINER, PLACEMENT_TEAM
      */
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private TrainerRole role;
 
     /**
-     * One-to-Many Relationship
+     * Login Email (unique).
+     * Isi pe credentials mail jayegi.
+     */
+    @Column(unique = true, nullable = false)
+    private String email;
+
+    /**
+     * Login Password (BCrypt hashed).
+     *
+     * Trainer create hote waqt system random password
+     * generate karega, mail me plain bhejega,
+     * database me sirf hash rakhega.
+     */
+    @Column(nullable = false)
+    private String password;
+
+    /**
+     * NAYA FIELD
+     *
+     * Pehli login pe password change force karne ke liye.
+     * Create hote waqt true, password change karte hi false.
+     */
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean firstLogin = true;
+
+    /**
+     * NAYA FIELD
+     *
+     * Trainer active hai ya nahi (soft delete).
+     * Trainer delete karna risky hai kyunki uske
+     * batches / contents sab uss se jude hote hain.
+     */
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean active = true;
+
+    /**
+     * One-to-Many
      *
      * Ek Trainer multiple batches handle kar sakta hai.
-     * Lekin ek Batch ka sirf ek Trainer hoga.
-     *
-     * Example:
      *
      * Rahul Sir
-     *    |
      *    |------ Java Batch
      *    |------ Spring Boot Batch
-     *    |------ DSA Batch
-     *
-     * mappedBy = "trainer"
-     * -> Relationship Batch Entity ke trainer field se manage ho raha hai.
      */
+    @Builder.Default
     @OneToMany(mappedBy = "trainer")
     private List<Batch> batches = new ArrayList<>();
 
     /**
-     * One-to-Many Relationship
-     *
+     * One-to-Many
      * Ek Trainer multiple announcements post kar sakta hai.
-     * Lekin ek Announcement sirf ek Trainer ka hoga.
-     *
-     * Example:
-     *
-     * Rahul Sir
-     *    |
-     *    |------ Today's Class Cancelled
-     *    |------ Assignment Uploaded
-     *    |------ Exam Schedule
-     *
-     * mappedBy = "trainer"
-     * -> Relationship Announcement Entity ke trainer field se manage hota hai.
      */
+    @Builder.Default
     @OneToMany(mappedBy = "trainer")
     private List<Announcement> announcements = new ArrayList<>();
 
     /**
-     * One-to-Many Relationship
-     *
+     * One-to-Many
      * Ek Trainer multiple study contents upload kar sakta hai.
-     * Lekin ek Content sirf ek Trainer ka hoga.
-     *
-     * Example:
-     *
-     * Rahul Sir
-     *    |
-     *    |------ Java Notes
-     *    |------ Spring Boot PDF
-     *    |------ React Recording
-     *
-     * mappedBy = "trainer"
-     * -> Relationship Content Entity ke trainer field se manage hota hai.
      */
+    @Builder.Default
     @OneToMany(mappedBy = "trainer")
     private List<Content> contents = new ArrayList<>();
 
-    /**
-     * ArrayList kyu use ki gayi?
-     *
-     * ✔ Multiple records store karne ke liye.
-     * ✔ Insertion order maintain rehta hai.
-     * ✔ Index ke through access kar sakte hain.
-     * ✔ Dynamic size hoti hai (automatically badh jaati hai).
-     */
-
     @CreatedDate
-private LocalDateTime createdAt;
+    @Column(updatable = false)
+    private LocalDateTime createdAt;
 
-@LastModifiedDate
-private LocalDateTime updatedAt;
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
 }
